@@ -1,0 +1,39 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "lancheros-sanjose",
+          "appId": "1:911991839770:android:92510018ae28ae737445a3",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "lancheros-sanjose",
+          "configurations": {
+            "android": "1:911991839770:android:92510018ae28ae737445a3",
+            "ios": "1:911991839770:ios:511a5463ce0807ee7445a3",
+            "macos": "1:911991839770:ios:511a5463ce0807ee7445a3",
+            "web": "1:911991839770:web:03c594b52b31b4667445a3",
+            "windows": "1:911991839770:web:b0bf51c184d262407445a3"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
