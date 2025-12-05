@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../models/viaje_model.dart';
 import '../models/cola_model.dart';
@@ -20,23 +20,65 @@ class DispatchScreen extends ConsumerStatefulWidget {
 
 class _DispatchScreenState extends ConsumerState<DispatchScreen> {
   ColaPonton? _pontonSeleccionado;
-  final Map<String, int> _contadorPasajeros = {
-    'adulto': 0,
-    'nino': 0,
-    'inapam': 0,
-    'especial': 0,
-    'trabajador': 0,
-    'cortesia': 0,
-  };
-  String _nota = '';
-  bool _esVacioAIsla = false;
+  
+  // Guardar datos individuales por cada pontón (Map<idPonton, Map<tipoPasajero, cantidad>>)
+  final Map<String, Map<String, int>> _datosPorPonton = {};
+  final Map<String, String> _notasPorPonton = {};
+  final Map<String, bool> _vacioAIslaPorPonton = {};
+  
   bool _registrando = false;
+
+  // Obtener contadores del pontón actual
+  Map<String, int> get _contadorPasajeros {
+    if (_pontonSeleccionado == null) {
+      return {
+        'adulto': 0,
+        'nino': 0,
+        'inapam': 0,
+        'especial': 0,
+        'trabajador': 0,
+        'cortesia': 0,
+      };
+    }
+    return _datosPorPonton.putIfAbsent(_pontonSeleccionado!.idPonton, () => {
+      'adulto': 0,
+      'nino': 0,
+      'inapam': 0,
+      'especial': 0,
+      'trabajador': 0,
+      'cortesia': 0,
+    });
+  }
+
+  String get _nota {
+    if (_pontonSeleccionado == null) return '';
+    return _notasPorPonton[_pontonSeleccionado!.idPonton] ?? '';
+  }
+
+  set _nota(String value) {
+    if (_pontonSeleccionado != null) {
+      _notasPorPonton[_pontonSeleccionado!.idPonton] = value;
+    }
+  }
+
+  bool get _esVacioAIsla {
+    if (_pontonSeleccionado == null) return false;
+    return _vacioAIslaPorPonton[_pontonSeleccionado!.idPonton] ?? false;
+  }
+
+  set _esVacioAIsla(bool value) {
+    if (_pontonSeleccionado != null) {
+      _vacioAIslaPorPonton[_pontonSeleccionado!.idPonton] = value;
+    }
+  }
 
   void _resetearContadores() {
     setState(() {
-      _contadorPasajeros.updateAll((key, value) => 0);
-      _nota = '';
-      _esVacioAIsla = false;
+      if (_pontonSeleccionado != null) {
+        _datosPorPonton.remove(_pontonSeleccionado!.idPonton);
+        _notasPorPonton.remove(_pontonSeleccionado!.idPonton);
+        _vacioAIslaPorPonton.remove(_pontonSeleccionado!.idPonton);
+      }
       _pontonSeleccionado = null;
     });
   }
@@ -128,6 +170,10 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
       backgroundColor: const Color(0xFF0A1929),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E3A5F),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
         title: Text(
           'La Tabla - Registro',
           style: GoogleFonts.poppins(
@@ -173,7 +219,10 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
                               final esSeleccionado =
                                   _pontonSeleccionado?.idPonton ==
                                       ponton.idPonton;
-                              final esCargando = index == 0;
+                              
+                              // Solo marcar como cargando si tiene pasajeros agregados
+                              final tienePasajeros = _datosPorPonton[ponton.idPonton]?.values.any((v) => v > 0) ?? false;
+                              final esCargando = tienePasajeros;
 
                               return _TarjetaPontonActivo(
                                 ponton: ponton,
@@ -314,7 +363,20 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
                                 valor: _contadorPasajeros[tipo] ?? 0,
                                 onChanged: (nuevoValor) {
                                   setState(() {
-                                    _contadorPasajeros[tipo] = nuevoValor;
+                                    if (_pontonSeleccionado != null) {
+                                      final contadores = _datosPorPonton.putIfAbsent(
+                                        _pontonSeleccionado!.idPonton,
+                                        () => {
+                                          'adulto': 0,
+                                          'nino': 0,
+                                          'inapam': 0,
+                                          'especial': 0,
+                                          'trabajador': 0,
+                                          'cortesia': 0,
+                                        },
+                                      );
+                                      contadores[tipo] = nuevoValor;
+                                    }
                                   });
                                 },
                               );

@@ -14,12 +14,14 @@ final estadisticasHoyProvider = FutureProvider<Map<String, dynamic>>((ref) async
   return await firebaseService.obtenerEstadisticasHoy();
 });
 
-/// Provider del total de vueltas hoy
-final totalVueltasHoyProvider = Provider<int>((ref) {
-  final viajesAsync = ref.watch(viajesHoyStreamProvider);
-  return viajesAsync.when(
-    data: (viajes) => viajes.length,
-    loading: () => 0,
-    error: (_, __) => 0,
-  );
+/// Provider del total de vueltas completas hoy (cuando todo el grupo completó un viaje)
+final totalVueltasHoyProvider = StreamProvider<int>((ref) {
+  final firebaseService = ref.watch(firebaseServiceProvider);
+  return firebaseService.streamConfiguracion().map((config) => config.vueltasCompletadasHoy);
+});
+
+/// Provider de estadísticas por pontón
+final estadisticasPorPontonProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final firebaseService = ref.watch(firebaseServiceProvider);
+  return await firebaseService.obtenerEstadisticasPorPonton();
 });

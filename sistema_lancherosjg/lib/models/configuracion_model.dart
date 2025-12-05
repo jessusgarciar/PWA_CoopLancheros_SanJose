@@ -6,12 +6,16 @@ class Configuracion {
   final int maxPasajeros; // Capacidad máxima por pontón
   final List<int> gruposActivos; // Grupos trabajando hoy
   final DateTime? ultimoCambioRol; // Última vez que se rotó el rol
+  final int vueltasCompletadasHoy; // Número de vueltas completadas por todo el grupo hoy
+  final DateTime? fechaUltimaVuelta; // Fecha de la última vuelta registrada
 
   Configuracion({
     required this.precios,
     required this.maxPasajeros,
     this.gruposActivos = const [1, 2, 3, 4],
     this.ultimoCambioRol,
+    this.vueltasCompletadasHoy = 0,
+    this.fechaUltimaVuelta,
   });
 
   /// Precio por tipo de pasajero
@@ -32,6 +36,10 @@ class Configuracion {
       ultimoCambioRol: data['ultimoCambioRol'] != null
           ? (data['ultimoCambioRol'] as Timestamp).toDate()
           : null,
+      vueltasCompletadasHoy: data['vueltasCompletadasHoy'] ?? 0,
+      fechaUltimaVuelta: data['fechaUltimaVuelta'] != null
+          ? (data['fechaUltimaVuelta'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -42,6 +50,10 @@ class Configuracion {
       'gruposActivos': gruposActivos,
       'ultimoCambioRol': ultimoCambioRol != null
           ? Timestamp.fromDate(ultimoCambioRol!)
+          : null,
+      'vueltasCompletadasHoy': vueltasCompletadasHoy,
+      'fechaUltimaVuelta': fechaUltimaVuelta != null
+          ? Timestamp.fromDate(fechaUltimaVuelta!)
           : null,
     };
   }
@@ -67,12 +79,16 @@ class Configuracion {
     int? maxPasajeros,
     List<int>? gruposActivos,
     DateTime? ultimoCambioRol,
+    int? vueltasCompletadasHoy,
+    DateTime? fechaUltimaVuelta,
   }) {
     return Configuracion(
       precios: precios ?? this.precios,
       maxPasajeros: maxPasajeros ?? this.maxPasajeros,
       gruposActivos: gruposActivos ?? this.gruposActivos,
       ultimoCambioRol: ultimoCambioRol ?? this.ultimoCambioRol,
+      vueltasCompletadasHoy: vueltasCompletadasHoy ?? this.vueltasCompletadasHoy,
+      fechaUltimaVuelta: fechaUltimaVuelta ?? this.fechaUltimaVuelta,
     );
   }
 }

@@ -31,7 +31,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Lancheros San José',
+      title: 'Cooperativa Lancheros San José de Gracia',
       debugShowCheckedModeBanner: false,
       routerConfig: appRouter,
       theme: ThemeData(

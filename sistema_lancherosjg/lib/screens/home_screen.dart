@@ -6,17 +6,36 @@ import 'package:intl/intl.dart';
 import '../models/cola_model.dart';
 import '../providers/cola_provider.dart';
 import '../providers/viajes_provider.dart';
-import '../services/firebase_service.dart';
+import '../providers/rol_semanal_provider.dart';
+import '../providers/firebase_provider.dart';
 
 /// Pantalla principal para lancheros
 /// Muestra: Quién está cargando, cuadro (próximos 5), y cola de espera
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Verificar y resetear contador al cargar la pantalla
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(firebaseServiceProvider).verificarYResetearContadorDiario();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colaOrganizada = ref.watch(colaOrganizadaProvider);
-    final totalVueltas = ref.watch(totalVueltasHoyProvider);
+    final totalVueltasAsync = ref.watch(totalVueltasHoyProvider);
+    final totalVueltas = totalVueltasAsync.maybeWhen(
+      data: (vueltas) => vueltas,
+      orElse: () => 0,
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1929),
@@ -77,6 +96,10 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Información del rol semanal
+            _InfoRolWidget(),
+            const SizedBox(height: 20),
+            
             // Sección: Cargando (el que está actualmente en servicio)
             _SeccionCola(
               titulo: '🚤 CARGANDO',
@@ -108,24 +131,46 @@ class HomeScreen extends ConsumerWidget {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Botón temporal (Bórralo después de usarlo una vez)
-          FloatingActionButton(
+          // Botón para inicializar sistema y agregar pontones del día
+          FloatingActionButton.extended(
             heroTag: 'initPontones',
             onPressed: () async {
               try {
-                final firebaseService = FirebaseService();
+                final firebaseService = ref.read(firebaseServiceProvider);
+                
+                // Primero inicializar el sistema (si no está inicializado)
                 await firebaseService.inicializarSistema();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('¡Listo! 28 Pontones creados en la base de datos.')),
-                );
+                
+                // Luego agregar pontones a la cola
+                await firebaseService.agregarPontonesActivosACola();
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ Pontones del grupo activo listos para trabajar'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 4),
+                    ),
+                  );
+                }
               }
             },
-            child: const Icon(Icons.cloud_upload),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.orange,
+            icon: const Icon(Icons.refresh),
+            label: Text(
+              'Iniciar Rol del Día',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 12),
           FloatingActionButton.extended(
@@ -133,10 +178,23 @@ class HomeScreen extends ConsumerWidget {
             onPressed: () {
               context.go('/tabla');
             },
-            backgroundColor: const Color(0xFF1E3A5F),
+            backgroundColor: Colors.blue,
             icon: const Icon(Icons.edit_note),
             label: Text(
-              'Ir a Tabla',
+              'Registrar Viaje',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'goAdmin',
+            onPressed: () {
+              context.go('/admin');
+            },
+            backgroundColor: Colors.orange,
+            icon: const Icon(Icons.admin_panel_settings),
+            label: Text(
+              'Panel Admin',
               style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
             ),
           ),
@@ -420,5 +478,120 @@ class _TarjetaPonton extends StatelessWidget {
     } else {
       return '${diferencia.inHours}h ${diferencia.inMinutes % 60}m';
     }
+  }
+}
+
+/// Widget para mostrar informaci�n del rol semanal actual
+class _InfoRolWidget extends ConsumerWidget {
+  const _InfoRolWidget();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final infoRolAsync = ref.watch(infoRolActualProvider);
+    final esFinDeSemana = ref.watch(esFinDeSemanaProvider);
+    final grupoTrabajoAsync = ref.watch(grupoTrabajoHoyProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1E3A5F),
+            const Color(0xFF2E5A8F),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                esFinDeSemana ? Icons.weekend : Icons.calendar_today,
+                color: Colors.orange,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: infoRolAsync.when(
+                  data: (info) => Text(
+                    info,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  loading: () => const Text(
+                    'Cargando rol...',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  error: (_, __) => const Text(
+                    'Error al cargar rol',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: esFinDeSemana 
+                  ? Colors.blue.withOpacity(0.3) 
+                  : Colors.green.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: esFinDeSemana ? Colors.blue : Colors.green,
+                width: 2,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  esFinDeSemana ? Icons.groups : Icons.directions_boat,
+                  color: esFinDeSemana ? Colors.blue : Colors.green,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: grupoTrabajoAsync.when(
+                    data: (grupo) => Text(
+                      esFinDeSemana
+                          ? 'FIN DE SEMANA: Trabajan todos los grupos (28 pontones)'
+                          : 'Hoy trabaja: Grupo $grupo',
+                      style: GoogleFonts.roboto(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    loading: () => const Text(
+                      'Calculando grupo...',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    error: (_, __) => const Text(
+                      'Error',
+                      style: TextStyle(color: Colors.red, fontSize: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
