@@ -446,6 +446,43 @@ class _TarjetaPonton extends StatelessWidget {
             ),
           ),
 
+          // Badge de "CARGANDO" para pontones destacados
+          if (destacado) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.green.withOpacity(0.5),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.sensors,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'CARGANDO',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Indicador de tiempo en cola
           if (!destacado)
             Column(

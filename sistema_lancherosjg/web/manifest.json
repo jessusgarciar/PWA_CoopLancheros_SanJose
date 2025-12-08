@@ -1,13 +1,14 @@
 {
-    "name": "sistema_lancherosjg",
-    "short_name": "sistema_lancherosjg",
+    "name": "Cooperativa Lancheros San José",
+    "short_name": "Lancheros SJ",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A1929",
+    "theme_color": "#1E3A5F",
+    "description": "Sistema de gestión para Cooperativa Lancheros San José",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "version": "2.0.0",
     "icons": [
         {
             "src": "icons/Icon-192.png",

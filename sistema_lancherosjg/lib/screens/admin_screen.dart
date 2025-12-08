@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../providers/viajes_provider.dart';
 import '../providers/cola_provider.dart';
 import '../providers/rol_semanal_provider.dart';
+import '../providers/firebase_provider.dart';
 
 /// Pantalla de administrador - Estadísticas y reportes
 class AdminScreen extends ConsumerWidget {
@@ -13,7 +14,7 @@ class AdminScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final estadisticasAsync = ref.watch(estadisticasHoyProvider);
+    final estadisticas = ref.watch(estadisticasHoyProvider);
     final totalPontonesEnCola = ref.watch(totalPontonesEnColaProvider);
 
     return Scaffold(
@@ -44,8 +45,7 @@ class AdminScreen extends ConsumerWidget {
           ],
         ),
       ),
-      body: estadisticasAsync.when(
-        data: (estadisticas) => SingleChildScrollView(
+      body: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,37 +169,123 @@ class AdminScreen extends ConsumerWidget {
 
               // Configuración del Rol Semanal
               _SeccionRolSemanal(),
+              
+              const SizedBox(height: 32),
+              
+              // Botón de emergencia para reinicializar pontones
+              _BotonReinicializarPontones(),
             ],
           ),
         ),
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: Colors.orange),
-        ),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    );
+  }
+}
+
+/// Botón de emergencia para reinicializar pontones
+class _BotonReinicializarPontones extends ConsumerWidget {
+  const _BotonReinicializarPontones();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 60),
-              const SizedBox(height: 16),
+              const Icon(Icons.warning_amber, color: Colors.red, size: 24),
+              const SizedBox(width: 12),
               Text(
-                'Error al cargar estadísticas',
+                'Zona de Emergencia',
                 style: GoogleFonts.poppins(
-                  color: Colors.white,
+                  color: Colors.red,
                   fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error.toString(),
-                style: GoogleFonts.roboto(
-                  color: Colors.white54,
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            'Usar solo si los grupos de pontones están incorrectos',
+            style: GoogleFonts.roboto(
+              color: Colors.white70,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                // Confirmar acción
+                final confirmar = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('⚠️ Confirmar Reinicialización'),
+                    content: const Text(
+                      'Esto eliminará todos los pontones y la cola actual, '
+                      'y los recreará con los grupos correctos.\n\n'
+                      '¿Estás seguro?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('Sí, Reinicializar'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirmar == true && context.mounted) {
+                  try {
+                    final firebaseService = ref.read(firebaseServiceProvider);
+                    await firebaseService.reinicializarPontones();
+                    
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✅ Pontones reinicializados. Ahora presiona "Iniciar Rol del Día"'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 5),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reinicializar Pontones'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -393,7 +479,7 @@ class _SeccionEstadisticasPorPonton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final estadisticasAsync = ref.watch(estadisticasPorPontonProvider);
+    final estadisticas = ref.watch(estadisticasPorPontonProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,10 +493,8 @@ class _SeccionEstadisticasPorPonton extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
-        estadisticasAsync.when(
-          data: (estadisticas) {
-            if (estadisticas.isEmpty) {
-              return Container(
+        estadisticas.isEmpty
+            ? Container(
                 padding: const EdgeInsets.all(40),
                 decoration: BoxDecoration(
                   color: Colors.white10,
@@ -426,10 +510,8 @@ class _SeccionEstadisticasPorPonton extends ConsumerWidget {
                     ),
                   ),
                 ),
-              );
-            }
-
-            return Container(
+              )
+            : Container(
               decoration: BoxDecoration(
                 color: Colors.white10,
                 borderRadius: BorderRadius.circular(16),
@@ -511,37 +593,7 @@ class _SeccionEstadisticasPorPonton extends ConsumerWidget {
                   ...estadisticas.map((stats) => _FilaPonton(stats: stats)),
                 ],
               ),
-            );
-          },
-          loading: () => Container(
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white24),
             ),
-            child: const Center(
-              child: CircularProgressIndicator(color: Colors.orange),
-            ),
-          ),
-          error: (error, stack) => Container(
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.red),
-            ),
-            child: Center(
-              child: Text(
-                'Error al cargar estadísticas por pontón',
-                style: GoogleFonts.roboto(
-                  color: Colors.red,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }

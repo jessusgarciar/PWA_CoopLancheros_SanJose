@@ -18,6 +18,7 @@ class ColaPonton {
   final EstadoCola estado;
   final int? posicionCuadro; // 1-6 para mostrar en pantalla (1=cargando, 2-6=cuadro)
   final int vueltasHoy; // Contador de vueltas completadas en el día
+  final bool tienePasajeros; // Indica si ya tiene pasajeros abordo (está cargando)
 
   ColaPonton({
     required this.idPonton,
@@ -27,6 +28,7 @@ class ColaPonton {
     required this.estado,
     this.posicionCuadro,
     this.vueltasHoy = 0,
+    this.tienePasajeros = false,
   });
 
   factory ColaPonton.fromFirestore(DocumentSnapshot doc) {
@@ -42,6 +44,7 @@ class ColaPonton {
       ),
       posicionCuadro: data['posicionCuadro'],
       vueltasHoy: data['vueltasHoy'] ?? 0,
+      tienePasajeros: data['tienePasajeros'] ?? false,
     );
   }
 
@@ -53,6 +56,7 @@ class ColaPonton {
       'estado': estado.name,
       'posicionCuadro': posicionCuadro,
       'vueltasHoy': vueltasHoy,
+      'tienePasajeros': tienePasajeros,
     };
   }
 
@@ -64,6 +68,7 @@ class ColaPonton {
     EstadoCola? estado,
     int? posicionCuadro,
     int? vueltasHoy,
+    bool? tienePasajeros,
   }) {
     return ColaPonton(
       idPonton: idPonton ?? this.idPonton,
@@ -73,6 +78,7 @@ class ColaPonton {
       estado: estado ?? this.estado,
       posicionCuadro: posicionCuadro ?? this.posicionCuadro,
       vueltasHoy: vueltasHoy ?? this.vueltasHoy,
+      tienePasajeros: tienePasajeros ?? this.tienePasajeros,
     );
   }
 }

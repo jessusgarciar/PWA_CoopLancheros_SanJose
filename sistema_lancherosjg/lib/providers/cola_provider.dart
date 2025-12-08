@@ -48,29 +48,18 @@ final colaOrganizadaProvider = Provider<Map<String, List<ColaPonton>>>((ref) {
         };
       }
 
-      // Separar por estado
-      final cargando = cola.where((p) => p.estado == EstadoCola.cargando).toList();
-      final cuadro = cola.where((p) => p.estado == EstadoCola.cuadro).toList();
-      final espera = cola.where((p) => p.estado == EstadoCola.espera).toList();
+      // Separar primeros 5 pontones (activos en cuadro)
+      final pontonesActivos = cola.take(5).toList();
+      final esperaResto = cola.length > 5 ? cola.skip(5).toList() : <ColaPonton>[];
 
-      // Si no hay ninguno marcado como cargando o cuadro, usar la lógica antigua
-      if (cargando.isEmpty && cuadro.isEmpty) {
-        // Primeros 5 van al cuadro
-        final cuadroAutomatico = cola.take(5).toList();
-        // El resto en espera
-        final esperaAutomatico = cola.length > 5 ? cola.skip(5).toList() : <ColaPonton>[];
-        
-        return {
-          'cargando': [],
-          'cuadro': cuadroAutomatico,
-          'espera': esperaAutomatico,
-        };
-      }
+      // De los activos, separar los que tienen pasajeros (cargando) vs los que no (cuadro)
+      final cargando = pontonesActivos.where((p) => p.tienePasajeros).toList();
+      final cuadro = pontonesActivos.where((p) => !p.tienePasajeros).toList();
 
       return {
         'cargando': cargando,
         'cuadro': cuadro,
-        'espera': espera,
+        'espera': esperaResto,
       };
     },
     loading: () => {

@@ -59,6 +59,43 @@ class FirebaseService {
       rethrow;
     }
   }
+  
+  /// Forzar reinicialización de pontones (USAR CON CUIDADO)
+  Future<void> reinicializarPontones() async {
+    try {
+      print('🔄 Reinicializando pontones...');
+      
+      // Eliminar todos los pontones existentes
+      final pontonesSnapshot = await _pontonesRef.get();
+      final batch1 = _firestore.batch();
+      for (var doc in pontonesSnapshot.docs) {
+        batch1.delete(doc.reference);
+      }
+      await batch1.commit();
+      
+      // Limpiar la cola
+      final colaSnapshot = await _colaRef.get();
+      final batch2 = _firestore.batch();
+      for (var doc in colaSnapshot.docs) {
+        batch2.delete(doc.reference);
+      }
+      await batch2.commit();
+      
+      // Crear los pontones con el orden correcto
+      final pontones = _crearPontonesDelRol();
+      final batch3 = _firestore.batch();
+      for (var ponton in pontones) {
+        batch3.set(_pontonesRef.doc(ponton.id), ponton.toFirestore());
+      }
+      await batch3.commit();
+      
+      print('✅ Pontones reinicializados correctamente');
+      print('⚠️ Ahora debes presionar "Iniciar Rol del Día" para agregar los pontones correctos a la cola');
+    } catch (e) {
+      print('❌ Error al reinicializar pontones: $e');
+      rethrow;
+    }
+  }
 
   /// Verificar si ya hay pontones en la cola
   Future<bool> hayPontonesEnCola() async {
@@ -97,6 +134,22 @@ class FirebaseService {
       for (var i = 0; i < pontonesNuevos.length; i++) {
         final ponton = pontonesNuevos[i];
         
+        // Determinar el estado inicial según la posición
+        // Posición 0 = cargando, 1-4 = cuadro, 5+ = espera
+        EstadoCola estadoInicial;
+        int? posicionCuadro;
+        
+        if (i == 0) {
+          estadoInicial = EstadoCola.cargando;
+          posicionCuadro = 1;
+        } else if (i <= 4) {
+          estadoInicial = EstadoCola.cuadro;
+          posicionCuadro = i + 1; // 2, 3, 4, 5
+        } else {
+          estadoInicial = EstadoCola.espera;
+          posicionCuadro = null;
+        }
+        
         // Agregar a la cola con un pequeño offset en el timestamp para mantener el orden
         batch.set(_colaRef.doc(ponton.id), {
           'nombrePonton': ponton.nombre,
@@ -104,12 +157,19 @@ class FirebaseService {
           'fechaIngreso': Timestamp.fromMillisecondsSinceEpoch(
             ahora.millisecondsSinceEpoch + i
           ),
-          'estado': EstadoCola.espera.name,
+          'estado': estadoInicial.name,
+          'posicionCuadro': posicionCuadro,
           'vueltasHoy': 0,
         });
       }
       
       await batch.commit();
+      
+      // Actualizar fecha de última actividad
+      await _configRef.update({
+        'fechaUltimaActividad': Timestamp.now(),
+      });
+      
       print('✅ ${pontonesNuevos.length} pontones agregados a la cola');
     } catch (e) {
       print('❌ Error al agregar pontones a la cola: $e');
@@ -126,14 +186,35 @@ class FirebaseService {
       final config = Configuracion.fromFirestore(configDoc);
       final ahora = DateTime.now();
       
-      // Si no hay fecha registrada o es un día diferente, resetear
-      if (config.fechaUltimaVuelta == null || 
-          !_esElMismoDia(config.fechaUltimaVuelta!, ahora)) {
-        await _configRef.update({
-          'vueltasCompletadasHoy': 0,
-          'fechaUltimaVuelta': null,
-        });
-        print('🔄 Contador de vueltas reseteado para nuevo día');
+      // Verificar si hay pontones en la cola primero
+      final colaSnapshot = await _colaRef.get();
+      
+      // Si no hay fecha de actividad registrada o es un día diferente, resetear
+      if (config.fechaUltimaActividad == null || 
+          !_esElMismoDia(config.fechaUltimaActividad!, ahora)) {
+        
+        // Solo resetear si hay algo que limpiar
+        if (colaSnapshot.docs.isNotEmpty || config.vueltasCompletadasHoy > 0) {
+          // Resetear contador global de vueltas
+          await _configRef.update({
+            'vueltasCompletadasHoy': 0,
+            'fechaUltimaVuelta': null,
+          });
+          
+          // Limpiar la cola de servicio (eliminar todos los pontones)
+          if (colaSnapshot.docs.isNotEmpty) {
+            final batch = _firestore.batch();
+            for (var doc in colaSnapshot.docs) {
+              batch.delete(doc.reference);
+            }
+            await batch.commit();
+            print('🧹 Cola de servicio limpiada para nuevo día');
+          }
+          
+          print('🔄 Sistema reseteado para nuevo día (${ahora.day}/${ahora.month}/${ahora.year})');
+        }
+      } else {
+        print('✅ Mismo día - No se resetea (${ahora.day}/${ahora.month}/${ahora.year})');
       }
     } catch (e) {
       print('⚠️ Error al verificar contador diario: $e');
@@ -149,26 +230,9 @@ class FirebaseService {
 
   /// Crear los 28 pontones según la imagen del rol
   List<Ponton> _crearPontonesDelRol() {
-    // Nombres extraídos directamente de la imagen
+    // Nombres extraídos directamente de las imágenes del rol
+    // Grupo #1 (15-21 Dic estimado): MARLIN, DIANA, SANTA MARIA, ALCON, COMETA, COMUNERO, GARZA, RODOLFO, MORE
     final nombresGrupo1 = [
-      'VAGABUNDO',
-      'PINTA',
-      'NIÑA',
-      'SOÑADOR',
-      'PELICANO',
-      'RANA',
-      'ORIGINAL'
-    ];
-    final nombresGrupo2 = [
-      'TIBURON',
-      'PITUFO',
-      'RIO BLANCO',
-      'PINGUINO',
-      'SOL',
-      'ALONDRA',
-      'SPIRIT'
-    ];
-    final nombresGrupo3 = [
       'DIANA',
       'DELFIN',
       'COLORAO',
@@ -177,14 +241,35 @@ class FirebaseService {
       'LUCHIN',
       'MARLIN'
     ];
-    final nombresGrupo4 = [
+    // Imagen 1 (24-30 Nov): Grupo #2
+    final nombresGrupo2 = [
+      'COMUNERO',
+      'GARZA',
+      'RODOLFO',
       'MORE',
       'SANTA MARIA',
       'ALCON',
-      'COMETA',
-      'COMUNERO',
-      'GARZA',
-      'RODOLFO'
+      'COMETA'
+    ];
+    // Imagen 2 (1-7 Dic): Grupo #3
+    final nombresGrupo3 = [
+      'VAGABUNDO',
+      'PINTA',
+      'NIÑA',
+      'SOÑADOR',
+      'PELICANO',
+      'RANA',
+      'ORIGINAL'
+    ];
+    // Imagen 3 (8-14 Dic HOY): Grupo #4
+    final nombresGrupo4 = [
+      'PITUFO',
+      'RIO BLANCO',
+      'PINGUINO',
+      'SOL',
+      'ALONDRA',
+      'SPIRIT',
+      'TIBURON'
     ];
 
     final List<Ponton> pontones = [];
@@ -268,13 +353,63 @@ class FirebaseService {
       await _colaRef.doc(idPonton).update({
         'fechaIngreso': Timestamp.now(),
         'estado': EstadoCola.espera.name,
+        'posicionCuadro': null,
         'vueltasHoy': cola.vueltasHoy + 1,
+        'tienePasajeros': false, // Resetear estado de pasajeros
       });
+
+      // Reorganizar estados de los pontones restantes
+      await _reorganizarEstadosCola();
 
       print('✅ Pontón reingresado al final de la cola');
     } catch (e) {
       print('❌ Error al reingresar a cola: $e');
       rethrow;
+    }
+  }
+
+  /// Reorganizar estados y posiciones después de cambios en la cola
+  Future<void> _reorganizarEstadosCola() async {
+    try {
+      // Obtener todos los pontones en cola ordenados por fecha
+      final snapshot = await _colaRef.orderBy('fechaIngreso').get();
+      final pontones = snapshot.docs.map((doc) => ColaPonton.fromFirestore(doc)).toList();
+
+      if (pontones.isEmpty) return;
+
+      final batch = _firestore.batch();
+
+      for (var i = 0; i < pontones.length; i++) {
+        final ponton = pontones[i];
+        EstadoCola nuevoEstado;
+        int? nuevaPosicion;
+
+        if (i == 0) {
+          // Primer pontón: cargando
+          nuevoEstado = EstadoCola.cargando;
+          nuevaPosicion = 1;
+        } else if (i <= 4) {
+          // Posiciones 2-5: cuadro
+          nuevoEstado = EstadoCola.cuadro;
+          nuevaPosicion = i + 1;
+        } else {
+          // Resto: espera
+          nuevoEstado = EstadoCola.espera;
+          nuevaPosicion = null;
+        }
+
+        // Solo actualizar si cambió
+        if (ponton.estado != nuevoEstado || ponton.posicionCuadro != nuevaPosicion) {
+          batch.update(_colaRef.doc(ponton.idPonton), {
+            'estado': nuevoEstado.name,
+            'posicionCuadro': nuevaPosicion,
+          });
+        }
+      }
+
+      await batch.commit();
+    } catch (e) {
+      print('⚠️ Error al reorganizar cola: $e');
     }
   }
 
@@ -287,6 +422,18 @@ class FirebaseService {
     } catch (e) {
       print('❌ Error al actualizar estado: $e');
       rethrow;
+    }
+  }
+
+  /// Actualizar si el pontón tiene pasajeros (está cargando)
+  Future<void> actualizarTienePasajeros(String idPonton, bool tienePasajeros) async {
+    try {
+      await _colaRef.doc(idPonton).update({
+        'tienePasajeros': tienePasajeros,
+      });
+    } catch (e) {
+      print('❌ Error al actualizar tienePasajeros: $e');
+      // No lanzar error para no interrumpir el flujo
     }
   }
 
@@ -624,33 +771,9 @@ class FirebaseService {
 
   /// ============ GESTIÓN DEL ROL ============
 
-  /// Rotar el rol semanalmente (grupo 1 al final, todos suben)
-  Future<void> rotarRolSemanal() async {
-    try {
-      final pontonesSnapshot = await _pontonesRef.get();
-      final batch = _firestore.batch();
-
-      for (var doc in pontonesSnapshot.docs) {
-        final ponton = Ponton.fromFirestore(doc);
-
-        // El grupo 4 pasa a ser grupo 1, los demás suben
-        int nuevoGrupo = ponton.grupo == 4 ? 1 : ponton.grupo + 1;
-
-        batch.update(doc.reference, {'grupo': nuevoGrupo});
-      }
-
-      // Actualizar fecha de último cambio
-      batch.update(_configRef, {
-        'ultimoCambioRol': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
-      print('✅ Rol rotado correctamente');
-    } catch (e) {
-      print('❌ Error al rotar rol: $e');
-      rethrow;
-    }
-  }
+  /// NOTA: Ya no se necesita rotación manual del rol
+  /// La rotación es AUTOMÁTICA y DIARIA basada en RolSemanal.grupoParaDia()
+  /// Cada día determina automáticamente qué grupo trabaja según la fecha
 
   /// ============ CONFIGURACIÓN ============
 
@@ -710,7 +833,6 @@ class FirebaseService {
   Future<List<Ponton>> obtenerPontonesOrdenadosPorRol({DateTime? fecha}) async {
     final fechaConsulta = fecha ?? DateTime.now();
     final rol = await obtenerRolSemanal();
-    final ordenGrupos = rol.calcularOrdenParaFecha(fechaConsulta);
     
     // Obtener todos los pontones
     final snapshot = await _pontonesRef.get();
@@ -720,7 +842,8 @@ class FirebaseService {
 
     // FINES DE SEMANA (Sábado y Domingo): Todos los pontones trabajan (28 pontones)
     if (rol.esFinDeSemana(fechaConsulta)) {
-      // Ordenar por grupo según el orden semanal, luego por orden dentro del grupo
+      final ordenGrupos = rol.calcularOrdenParaFecha(fechaConsulta);
+      // Ordenar por grupo según el orden del lunes, luego por orden dentro del grupo
       todosPontones.sort((a, b) {
         final indexA = ordenGrupos.indexOf(a.grupo);
         final indexB = ordenGrupos.indexOf(b.grupo);
@@ -730,11 +853,12 @@ class FirebaseService {
       return todosPontones;
     }
 
-    // DÍAS DE SEMANA (Lunes a Viernes): Solo trabaja el grupo que abre la semana
-    // Este grupo trabaja de lunes a viernes (abre lunes, cierra viernes)
-    final grupoTrabajo = ordenGrupos[0];
+    // DÍAS DE SEMANA (Lunes a Viernes): Trabaja solo el grupo del día
+    // La rotación es DIARIA: Lunes→Martes→Miércoles→Jueves (grupos diferentes)
+    // Viernes repite el grupo del lunes
+    final grupoDelDia = rol.grupoParaDia(fechaConsulta);
     final pontonesDelDia = todosPontones
-        .where((p) => p.grupo == grupoTrabajo)
+        .where((p) => p.grupo == grupoDelDia)
         .toList();
     
     pontonesDelDia.sort((a, b) => a.ordenEnGrupo.compareTo(b.ordenEnGrupo));

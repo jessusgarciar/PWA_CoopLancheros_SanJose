@@ -220,9 +220,8 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
                                   _pontonSeleccionado?.idPonton ==
                                       ponton.idPonton;
                               
-                              // Solo marcar como cargando si tiene pasajeros agregados
-                              final tienePasajeros = _datosPorPonton[ponton.idPonton]?.values.any((v) => v > 0) ?? false;
-                              final esCargando = tienePasajeros;
+                              // Está cargando si tiene pasajeros abordo
+                              final esCargando = ponton.tienePasajeros;
 
                               return _TarjetaPontonActivo(
                                 ponton: ponton,
@@ -354,14 +353,13 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            ...precios.entries.map((entry) {
-                              final tipo = entry.key;
-                              final precio = entry.value;
+                            ..._ordenTiposPasajeros.map((tipo) {
+                              final precio = precios[tipo] ?? 0.0;
                               return _ContadorPasajeros(
                                 titulo: _formatearTipo(tipo),
                                 precio: precio,
                                 valor: _contadorPasajeros[tipo] ?? 0,
-                                onChanged: (nuevoValor) {
+                                onChanged: (nuevoValor) async {
                                   setState(() {
                                     if (_pontonSeleccionado != null) {
                                       final contadores = _datosPorPonton.putIfAbsent(
@@ -378,6 +376,16 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
                                       contadores[tipo] = nuevoValor;
                                     }
                                   });
+                                  
+                                  // Marcar el pontón como "tiene pasajeros" en Firestore
+                                  if (_pontonSeleccionado != null) {
+                                    final tienePasajeros = _contadorPasajeros.values.any((v) => v > 0);
+                                    final firebaseService = ref.read(firebaseServiceProvider);
+                                    await firebaseService.actualizarTienePasajeros(
+                                      _pontonSeleccionado!.idPonton,
+                                      tienePasajeros,
+                                    );
+                                  }
                                 },
                               );
                             }),
@@ -495,6 +503,16 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
       ),
     );
   }
+
+  // Orden estático de tipos de pasajeros para mantener consistencia
+  static const List<String> _ordenTiposPasajeros = [
+    'adulto',
+    'nino',
+    'inapam',
+    'especial',
+    'trabajador',
+    'cortesia',
+  ];
 
   String _formatearTipo(String tipo) {
     final map = {

@@ -8,6 +8,7 @@ class Configuracion {
   final DateTime? ultimoCambioRol; // Última vez que se rotó el rol
   final int vueltasCompletadasHoy; // Número de vueltas completadas por todo el grupo hoy
   final DateTime? fechaUltimaVuelta; // Fecha de la última vuelta registrada
+  final DateTime? fechaUltimaActividad; // Fecha de la última actividad (agregar pontones, viajes, etc)
 
   Configuracion({
     required this.precios,
@@ -16,6 +17,7 @@ class Configuracion {
     this.ultimoCambioRol,
     this.vueltasCompletadasHoy = 0,
     this.fechaUltimaVuelta,
+    this.fechaUltimaActividad,
   });
 
   /// Precio por tipo de pasajero
@@ -40,6 +42,9 @@ class Configuracion {
       fechaUltimaVuelta: data['fechaUltimaVuelta'] != null
           ? (data['fechaUltimaVuelta'] as Timestamp).toDate()
           : null,
+      fechaUltimaActividad: data['fechaUltimaActividad'] != null
+          ? (data['fechaUltimaActividad'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -54,6 +59,9 @@ class Configuracion {
       'vueltasCompletadasHoy': vueltasCompletadasHoy,
       'fechaUltimaVuelta': fechaUltimaVuelta != null
           ? Timestamp.fromDate(fechaUltimaVuelta!)
+          : null,
+      'fechaUltimaActividad': fechaUltimaActividad != null
+          ? Timestamp.fromDate(fechaUltimaActividad!)
           : null,
     };
   }
@@ -81,6 +89,7 @@ class Configuracion {
     DateTime? ultimoCambioRol,
     int? vueltasCompletadasHoy,
     DateTime? fechaUltimaVuelta,
+    DateTime? fechaUltimaActividad,
   }) {
     return Configuracion(
       precios: precios ?? this.precios,
@@ -89,6 +98,7 @@ class Configuracion {
       ultimoCambioRol: ultimoCambioRol ?? this.ultimoCambioRol,
       vueltasCompletadasHoy: vueltasCompletadasHoy ?? this.vueltasCompletadasHoy,
       fechaUltimaVuelta: fechaUltimaVuelta ?? this.fechaUltimaVuelta,
+      fechaUltimaActividad: fechaUltimaActividad ?? this.fechaUltimaActividad,
     );
   }
 }
