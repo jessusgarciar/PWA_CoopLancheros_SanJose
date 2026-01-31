@@ -9,7 +9,7 @@ enum EstadoCola {
 }
 
 /// Representa un pontón en la cola de servicio
-/// Se ordena por fecha de ingreso para mantener el turno
+/// Se ordena por ordenOriginal (del rol) y luego por vueltas completadas
 class ColaPonton {
   final String idPonton;
   final String nombrePonton;
@@ -19,6 +19,7 @@ class ColaPonton {
   final int? posicionCuadro; // 1-6 para mostrar en pantalla (1=cargando, 2-6=cuadro)
   final int vueltasHoy; // Contador de vueltas completadas en el día
   final bool tienePasajeros; // Indica si ya tiene pasajeros abordo (está cargando)
+  final int ordenOriginal; // Orden según el rol del día (se mantiene fijo toda la jornada)
 
   ColaPonton({
     required this.idPonton,
@@ -29,6 +30,7 @@ class ColaPonton {
     this.posicionCuadro,
     this.vueltasHoy = 0,
     this.tienePasajeros = false,
+    required this.ordenOriginal,
   });
 
   factory ColaPonton.fromFirestore(DocumentSnapshot doc) {
@@ -45,6 +47,7 @@ class ColaPonton {
       posicionCuadro: data['posicionCuadro'],
       vueltasHoy: data['vueltasHoy'] ?? 0,
       tienePasajeros: data['tienePasajeros'] ?? false,
+      ordenOriginal: data['ordenOriginal'] ?? 0,
     );
   }
 
@@ -57,6 +60,7 @@ class ColaPonton {
       'posicionCuadro': posicionCuadro,
       'vueltasHoy': vueltasHoy,
       'tienePasajeros': tienePasajeros,
+      'ordenOriginal': ordenOriginal,
     };
   }
 
@@ -69,6 +73,7 @@ class ColaPonton {
     int? posicionCuadro,
     int? vueltasHoy,
     bool? tienePasajeros,
+    int? ordenOriginal,
   }) {
     return ColaPonton(
       idPonton: idPonton ?? this.idPonton,
@@ -79,6 +84,7 @@ class ColaPonton {
       posicionCuadro: posicionCuadro ?? this.posicionCuadro,
       vueltasHoy: vueltasHoy ?? this.vueltasHoy,
       tienePasajeros: tienePasajeros ?? this.tienePasajeros,
+      ordenOriginal: ordenOriginal ?? this.ordenOriginal,
     );
   }
 }

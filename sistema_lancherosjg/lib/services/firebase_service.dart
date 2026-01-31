@@ -111,28 +111,36 @@ class FirebaseService {
   /// Agregar los pontones del grupo activo a la cola de servicio
   Future<void> agregarPontonesActivosACola() async {
     try {
+      // Verificar si es un nuevo día antes de agregar
+      await verificarYResetearContadorDiario();
+      
+      // SIEMPRE limpiar la cola antes de agregar nuevos pontones
+      // Esto asegura que se resetee correctamente
+      final colaSnapshot = await _colaRef.get();
+      if (colaSnapshot.docs.isNotEmpty) {
+        final batch = _firestore.batch();
+        for (var doc in colaSnapshot.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+        print('🧹 Cola limpiada antes de agregar pontones del día');
+      }
+      
       // Obtener pontones que trabajan hoy según el rol
       final pontonesHoy = await obtenerPontonesOrdenadosPorRol();
       
-      // Verificar cuáles ya están en cola
-      final snapshot = await _colaRef.get();
-      final idsEnCola = snapshot.docs.map((doc) => doc.id).toSet();
-      
-      // Filtrar solo los que NO están en cola
-      final pontonesNuevos = pontonesHoy.where((p) => !idsEnCola.contains(p.id)).toList();
-      
-      if (pontonesNuevos.isEmpty) {
-        print('ℹ️ Todos los pontones del grupo ya están en servicio');
+      if (pontonesHoy.isEmpty) {
+        print('⚠️ No hay pontones para agregar');
         return;
       }
       
-      print('📋 Agregando ${pontonesNuevos.length} pontones nuevos a la cola...');
+      print('📋 Agregando ${pontonesHoy.length} pontones a la cola...');
       
       final batch = _firestore.batch();
       final ahora = Timestamp.now();
       
-      for (var i = 0; i < pontonesNuevos.length; i++) {
-        final ponton = pontonesNuevos[i];
+      for (var i = 0; i < pontonesHoy.length; i++) {
+        final ponton = pontonesHoy[i];
         
         // Determinar el estado inicial según la posición
         // Posición 0 = cargando, 1-4 = cuadro, 5+ = espera
@@ -155,11 +163,13 @@ class FirebaseService {
           'nombrePonton': ponton.nombre,
           'nombreChofer': ponton.nombreChofer ?? 'Sin asignar',
           'fechaIngreso': Timestamp.fromMillisecondsSinceEpoch(
-            ahora.millisecondsSinceEpoch + i
+            ahora.millisecondsSinceEpoch + (i * 1000) // 1 segundo entre cada uno
           ),
           'estado': estadoInicial.name,
           'posicionCuadro': posicionCuadro,
           'vueltasHoy': 0,
+          'tienePasajeros': false,
+          'ordenOriginal': i, // Guardar posición original del rol
         });
       }
       
@@ -168,16 +178,17 @@ class FirebaseService {
       // Actualizar fecha de última actividad
       await _configRef.update({
         'fechaUltimaActividad': Timestamp.now(),
+        'vueltasCompletadasHoy': 0, // Resetear contador de vueltas
       });
       
-      print('✅ ${pontonesNuevos.length} pontones agregados a la cola');
+      print('✅ ${pontonesHoy.length} pontones agregados a la cola (sistema reiniciado)');
     } catch (e) {
       print('❌ Error al agregar pontones a la cola: $e');
       rethrow;
     }
   }
   
-  /// Verificar si es un nuevo día y resetear el contador de vueltas
+  /// Verificar si es un nuevo día y resetear todo el sistema
   Future<void> verificarYResetearContadorDiario() async {
     try {
       final configDoc = await _configRef.get();
@@ -195,10 +206,11 @@ class FirebaseService {
         
         // Solo resetear si hay algo que limpiar
         if (colaSnapshot.docs.isNotEmpty || config.vueltasCompletadasHoy > 0) {
-          // Resetear contador global de vueltas
+          // Resetear contador global de vueltas y actualizar fecha de actividad
           await _configRef.update({
             'vueltasCompletadasHoy': 0,
             'fechaUltimaVuelta': null,
+            'fechaUltimaActividad': Timestamp.fromDate(ahora),
           });
           
           // Limpiar la cola de servicio (eliminar todos los pontones)
@@ -212,6 +224,11 @@ class FirebaseService {
           }
           
           print('🔄 Sistema reseteado para nuevo día (${ahora.day}/${ahora.month}/${ahora.year})');
+        } else {
+          // Actualizar la fecha aunque no haya nada que limpiar
+          await _configRef.update({
+            'fechaUltimaActividad': Timestamp.fromDate(ahora),
+          });
         }
       } else {
         print('✅ Mismo día - No se resetea (${ahora.day}/${ahora.month}/${ahora.year})');
@@ -231,45 +248,45 @@ class FirebaseService {
   /// Crear los 28 pontones según la imagen del rol
   List<Ponton> _crearPontonesDelRol() {
     // Nombres extraídos directamente de las imágenes del rol
-    // Grupo #1 (15-21 Dic estimado): MARLIN, DIANA, SANTA MARIA, ALCON, COMETA, COMUNERO, GARZA, RODOLFO, MORE
+    // Grupo #1 (Obreado #1): 1-7
     final nombresGrupo1 = [
+      'MARLIN',
       'DIANA',
       'DELFIN',
-      'COLORAO',
+      'COLORADO',
       'ASTRO',
       'ALBORADA',
-      'LUCHIN',
-      'MARLIN'
+      'LUCHIN'
     ];
-    // Imagen 1 (24-30 Nov): Grupo #2
+    // Grupo #2 (Obreado #2): 8-14
     final nombresGrupo2 = [
-      'COMUNERO',
-      'GARZA',
       'RODOLFO',
-      'MORE',
+      'MONE',
       'SANTA MARIA',
       'ALCON',
-      'COMETA'
+      'COMETA',
+      'COMUNERO',
+      'GARZA'
     ];
-    // Imagen 2 (1-7 Dic): Grupo #3
+    // Grupo #3 (Obreado #3): 15-21
     final nombresGrupo3 = [
+      'ORIGINAL',
       'VAGABUNDO',
       'PINTA',
       'NIÑA',
       'SOÑADOR',
       'PELICANO',
-      'RANA',
-      'ORIGINAL'
+      'RANA'
     ];
-    // Imagen 3 (8-14 Dic HOY): Grupo #4
+    // Grupo #4 (Obreado #4): 22-28
     final nombresGrupo4 = [
+      'SPIRIT',
+      'TIBURON',
       'PITUFO',
       'RIO BLANCO',
       'PINGUINO',
-      'SOL',
-      'ALONDRA',
-      'SPIRIT',
-      'TIBURON'
+      'LEON',
+      'ALONDRA'
     ];
 
     final List<Ponton> pontones = [];
@@ -300,14 +317,28 @@ class FirebaseService {
 
   /// ============ GESTIÓN DE LA COLA ============
 
-  /// Stream de la cola en tiempo real (ordenada por antigüedad)
+  /// Stream de la cola en tiempo real (ordenada por orden original del rol)
   Stream<List<ColaPonton>> streamCola() {
     return _colaRef
-        .orderBy('fechaIngreso')
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ColaPonton.fromFirestore(doc))
-            .toList());
+        .map((snapshot) {
+          final pontones = snapshot.docs
+              .map((doc) => ColaPonton.fromFirestore(doc))
+              .toList();
+          
+          // Ordenar por: 1) vueltas completadas, 2) orden original del rol
+          // Esto mantiene el orden del rol incluso si terminan en diferente orden
+          pontones.sort((a, b) {
+            // Primero por vueltas (menos vueltas = más prioritario)
+            final vueltasCompare = a.vueltasHoy.compareTo(b.vueltasHoy);
+            if (vueltasCompare != 0) return vueltasCompare;
+            
+            // Si tienen las mismas vueltas, por orden original
+            return a.ordenOriginal.compareTo(b.ordenOriginal);
+          });
+          
+          return pontones;
+        });
   }
 
   /// Agregar pontón a la cola
@@ -326,12 +357,18 @@ class FirebaseService {
         throw Exception('Este pontón ya está en la cola');
       }
 
+      // Obtener cuántos pontones hay en cola para calcular el ordenOriginal
+      final snapshot = await _colaRef.get();
+      final ordenOriginal = snapshot.docs.length;
+
       await _colaRef.doc(idPonton).set({
         'nombrePonton': ponton.nombre,
         'nombreChofer': nombreChofer,
         'fechaIngreso': Timestamp.now(),
         'estado': EstadoCola.espera.name,
         'vueltasHoy': 0,
+        'tienePasajeros': false,
+        'ordenOriginal': ordenOriginal,
       });
 
       print('✅ Pontón ${ponton.nombre} agregado a la cola');
@@ -349,19 +386,21 @@ class FirebaseService {
 
       final cola = ColaPonton.fromFirestore(colaDoc);
 
-      // Actualizar con nueva fecha para ir al final
+      // Actualizar solo vueltas y estado, NO el ordenOriginal
+      // Esto mantiene el orden del rol original
       await _colaRef.doc(idPonton).update({
-        'fechaIngreso': Timestamp.now(),
+        'fechaIngreso': Timestamp.now(), // Solo para referencia de tiempo
         'estado': EstadoCola.espera.name,
         'posicionCuadro': null,
         'vueltasHoy': cola.vueltasHoy + 1,
-        'tienePasajeros': false, // Resetear estado de pasajeros
+        'tienePasajeros': false,
+        // NO actualizar 'ordenOriginal' - se mantiene fijo
       });
 
       // Reorganizar estados de los pontones restantes
       await _reorganizarEstadosCola();
 
-      print('✅ Pontón reingresado al final de la cola');
+      print('✅ Pontón reingresado manteniendo su orden original');
     } catch (e) {
       print('❌ Error al reingresar a cola: $e');
       rethrow;
@@ -371,9 +410,8 @@ class FirebaseService {
   /// Reorganizar estados y posiciones después de cambios en la cola
   Future<void> _reorganizarEstadosCola() async {
     try {
-      // Obtener todos los pontones en cola ordenados por fecha
-      final snapshot = await _colaRef.orderBy('fechaIngreso').get();
-      final pontones = snapshot.docs.map((doc) => ColaPonton.fromFirestore(doc)).toList();
+      // Obtener todos los pontones ordenados correctamente
+      final pontones = await streamCola().first;
 
       if (pontones.isEmpty) return;
 
@@ -476,6 +514,31 @@ class FirebaseService {
       print('❌ Error al remover de cola: $e');
       rethrow;
     }
+  }
+
+  /// ============ LLEGADAS A ISLA (PASEOS) ============
+
+  /// Registrar cantidad de personas que llegan a la isla (paseos con llegada)
+  Future<void> registrarLlegadasIsla(int cantidad) async {
+    try {
+      final hoy = DateTime.now();
+      final id = '${hoy.year}-${hoy.month}-${hoy.day}';
+      await _firestore.collection('admin').doc('llegadas_isla').set({
+        id: FieldValue.increment(cantidad),
+      }, SetOptions(merge: true));
+      print('📝 Llegadas a isla registradas: +$cantidad');
+    } catch (e) {
+      print('❌ Error registrando llegadas: $e');
+    }
+  }
+
+  /// Stream de llegadas para panel admin
+  Stream<Map<String, int>> streamLlegadasIsla() {
+    return _firestore.collection('admin').doc('llegadas_isla').snapshots().map((doc) {
+      if (!doc.exists) return <String, int>{};
+      final data = doc.data() as Map<String, dynamic>;
+      return data.map((k, v) => MapEntry(k, (v as num).toInt()));
+    });
   }
 
   /// ============ REGISTRO DE VIAJES (LA TABLA) ============
@@ -653,6 +716,9 @@ class FirebaseService {
 
   /// Obtener total de vueltas hoy
   Future<int> obtenerTotalVueltasHoy() async {
+    // Verificar si es un nuevo día antes de retornar las vueltas
+    await verificarYResetearContadorDiario();
+    
     final configDoc = await _configRef.get();
     if (configDoc.exists) {
       final config = Configuracion.fromFirestore(configDoc);
@@ -843,14 +909,36 @@ class FirebaseService {
     // FINES DE SEMANA (Sábado y Domingo): Todos los pontones trabajan (28 pontones)
     if (rol.esFinDeSemana(fechaConsulta)) {
       final ordenGrupos = rol.calcularOrdenParaFecha(fechaConsulta);
-      // Ordenar por grupo según el orden del lunes, luego por orden dentro del grupo
-      todosPontones.sort((a, b) {
-        final indexA = ordenGrupos.indexOf(a.grupo);
-        final indexB = ordenGrupos.indexOf(b.grupo);
-        if (indexA != indexB) return indexA.compareTo(indexB);
-        return a.ordenEnGrupo.compareTo(b.ordenEnGrupo);
-      });
-      return todosPontones;
+      
+      // Agrupar pontones por grupo
+      final pontonesPorGrupo = <int, List<Ponton>>{};
+      for (var ponton in todosPontones) {
+        pontonesPorGrupo.putIfAbsent(ponton.grupo, () => []).add(ponton);
+      }
+      
+      // Ordenar cada grupo y aplicar rotación interna específica por grupo
+      for (var grupo in pontonesPorGrupo.keys) {
+        pontonesPorGrupo[grupo]!.sort((a, b) => a.ordenEnGrupo.compareTo(b.ordenEnGrupo));
+        
+        // Calcular rotaciones para este grupo específico
+        final rotacionesInternas = rol.calcularRotacionesInternas(fechaConsulta, grupo);
+        
+        // Rotar internamente
+        for (int i = 0; i < rotacionesInternas; i++) {
+          if (pontonesPorGrupo[grupo]!.isNotEmpty) {
+            final primero = pontonesPorGrupo[grupo]!.removeAt(0);
+            pontonesPorGrupo[grupo]!.add(primero);
+          }
+        }
+      }
+      
+      // Reconstruir lista en orden de grupos
+      final resultado = <Ponton>[];
+      for (var numeroGrupo in ordenGrupos) {
+        resultado.addAll(pontonesPorGrupo[numeroGrupo] ?? []);
+      }
+      
+      return resultado;
     }
 
     // DÍAS DE SEMANA (Lunes a Viernes): Trabaja solo el grupo del día
@@ -861,7 +949,19 @@ class FirebaseService {
         .where((p) => p.grupo == grupoDelDia)
         .toList();
     
+    // Ordenar por ordenEnGrupo
     pontonesDelDia.sort((a, b) => a.ordenEnGrupo.compareTo(b.ordenEnGrupo));
+    
+    // Aplicar rotación interna semanal: el primero pasa al final cada semana
+    // Calcular rotaciones para este grupo específico
+    final rotacionesInternas = rol.calcularRotacionesInternas(fechaConsulta, grupoDelDia);
+    for (int i = 0; i < rotacionesInternas; i++) {
+      if (pontonesDelDia.isNotEmpty) {
+        final primero = pontonesDelDia.removeAt(0);
+        pontonesDelDia.add(primero);
+      }
+    }
+    
     return pontonesDelDia;
   }
 

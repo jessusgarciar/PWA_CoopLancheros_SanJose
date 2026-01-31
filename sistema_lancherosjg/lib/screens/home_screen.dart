@@ -22,7 +22,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Verificar y resetear contador al cargar la pantalla
+    // Verificar automáticamente si es un nuevo día y resetear todo el sistema
+    // Esto limpia: cola de espera, contador de vueltas, estados de pontones
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(firebaseServiceProvider).verificarYResetearContadorDiario();
     });
@@ -83,6 +84,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton.icon(
+                      onPressed: () => context.go('/guardia'),
+                      icon: const Icon(Icons.shield, color: Colors.white),
+                      label: const Text('Guardia'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => context.go('/apoyos'),
+                      icon: const Icon(Icons.group, color: Colors.white),
+                      label: const Text('Apoyos'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.white),
                     ),
                   ],
                 ),

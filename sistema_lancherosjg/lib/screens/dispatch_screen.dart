@@ -8,6 +8,7 @@ import '../models/cola_model.dart';
 import '../providers/cola_provider.dart';
 import '../providers/configuracion_provider.dart';
 import '../providers/firebase_provider.dart';
+import '../providers/viajes_provider.dart';
 
 /// Pantalla "La Tabla" - Registro de viajes completados
 /// Muestra los 5 pontones activos y permite registrar pasajeros
@@ -159,6 +160,11 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
   Widget build(BuildContext context) {
     final colaOrganizada = ref.watch(colaOrganizadaProvider);
     final precios = ref.watch(preciosProvider);
+    final totalVueltasAsync = ref.watch(totalVueltasHoyProvider);
+    final totalVueltas = totalVueltasAsync.maybeWhen(
+      data: (vueltas) => vueltas,
+      orElse: () => 0,
+    );
     
     // Los pontones activos son: cargando + cuadro
     final pontonesActivos = [
@@ -181,6 +187,84 @@ class _DispatchScreenState extends ConsumerState<DispatchScreen> {
           ),
         ),
         centerTitle: true,
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.refresh, color: Colors.white, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$totalVueltas vueltas',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton.icon(
+                      onPressed: () async {
+                        // Ingreso de personas que llegan a la isla (paseos con llegada)
+                        final txt = TextEditingController();
+                        final res = await showDialog<int>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF1E3A5F),
+                            title: Text('Personas con llegada a isla', style: GoogleFonts.poppins(color: Colors.white)),
+                            content: TextField(
+                              controller: txt,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: const InputDecoration(
+                                hintText: 'Cantidad',
+                                hintStyle: TextStyle(color: Colors.white54),
+                                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+                                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.orange)),
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                                onPressed: () {
+                                  final v = int.tryParse(txt.text.trim());
+                                  Navigator.pop(ctx, v);
+                                },
+                                child: const Text('Guardar'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (res != null) {
+                          final svc = ref.read(firebaseServiceProvider);
+                          await svc.registrarLlegadasIsla(res);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Registradas $res personas llegando a isla')),);
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.anchor, color: Colors.white),
+                      label: const Text('Llegadas'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Row(
         children: [

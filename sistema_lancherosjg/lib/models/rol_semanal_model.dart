@@ -108,11 +108,11 @@ class RolSemanal {
   }
 
   /// Constructor con valores por defecto
-  /// 1 Diciembre 2025 (Lunes) = Grupo 3 según tu calendario
+  /// 27 de enero 2026 (Martes) = Grupo 1 (lunes 26 = Grupo 4)
   factory RolSemanal.porDefecto() {
     return RolSemanal(
-      fechaInicio: DateTime(2025, 12, 1), // Lunes 1 de diciembre 2025
-      grupoInicio: 3, // Ese día trabaja Grupo 3
+      fechaInicio: DateTime(2026, 1, 27), // Martes 27 de enero 2026
+      grupoInicio: 1, // Ese día martes trabaja Grupo 1, por lo tanto lunes fue Grupo 4
     );
   }
 
@@ -123,5 +123,28 @@ class RolSemanal {
       return 'Fin de semana - Todos los grupos';
     }
     return 'Grupo $grupo';
+  }
+
+  /// Calcular cuántas rotaciones internas (dentro del grupo) han ocurrido
+  /// Cada semana el primer pontón del grupo pasa al final
+  /// La rotación ocurre solo cuando ese grupo trabaja el LUNES (inicio de semana)
+  int calcularRotacionesInternas(DateTime fecha, int grupo) {
+    // Contar cuántos lunes ANTERIORES ha trabajado este grupo desde fechaInicio
+    int vecesComoLunes = 0;
+    
+    // Empezar desde el lunes de fechaInicio
+    DateTime lunes = _obtenerInicioSemana(fechaInicio);
+    final lunesActual = _obtenerInicioSemana(fecha);
+    
+    // Recorrer todos los lunes ANTES del actual (no incluir la semana actual)
+    while (lunes.isBefore(lunesActual)) {
+      if (grupoParaDia(lunes) == grupo) {
+        vecesComoLunes++;
+      }
+      lunes = lunes.add(const Duration(days: 7)); // siguiente lunes
+    }
+    
+    // Cada vez que trabajó el lunes en semanas ANTERIORES, rota una posición
+    return vecesComoLunes % 7; // Ciclo completo cada 7 semanas (7 pontones por grupo)
   }
 }
